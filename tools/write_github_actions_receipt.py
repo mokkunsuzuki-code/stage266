@@ -8,7 +8,7 @@ import pathlib
 from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT_DIR = ROOT / "out" / "release"
+OUT = ROOT / "out" / "release"
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -20,61 +20,53 @@ def sha256_file(path: pathlib.Path) -> str:
 
 
 def main() -> None:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
 
-    manifest = OUT_DIR / "release_manifest.json"
-    manifest_ots = OUT_DIR / "release_manifest.json.ots"
-    manifest_sha = OUT_DIR / "release_manifest.json.sha256"
-    receipt = OUT_DIR / "github_actions_receipt.json"
+    manifest = OUT / "release_manifest.json"
+    manifest_sha = OUT / "release_manifest.json.sha256"
+    manifest_ots = OUT / "release_manifest.json.ots"
 
-    server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
-    repository = os.getenv("GITHUB_REPOSITORY", "")
-    run_id = os.getenv("GITHUB_RUN_ID", "")
+    files = {
+        "release_manifest.json": {
+            "path": str(manifest.relative_to(ROOT)),
+            "sha256": sha256_file(manifest),
+        },
+        "release_manifest.json.ots": {
+            "path": str(manifest_ots.relative_to(ROOT)),
+            "sha256": sha256_file(manifest_ots),
+        },
+        "release_manifest.json.sha256": {
+            "path": str(manifest_sha.relative_to(ROOT)),
+            "sha256": sha256_file(manifest_sha),
+        },
+    }
 
-    run_url = ""
-    if repository and run_id:
-        run_url = f"{server_url}/{repository}/actions/runs/{run_id}"
-
-    payload = {
+    receipt = {
         "version": 1,
-        "stage": "stage264",
-        "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "stage": "stage265",  # ← ここ修正
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "github_actions": {
             "workflow": os.getenv("GITHUB_WORKFLOW", ""),
-            "repository": repository,
-            "run_id": run_id,
+            "run_id": os.getenv("GITHUB_RUN_ID", ""),
             "run_attempt": os.getenv("GITHUB_RUN_ATTEMPT", ""),
-            "run_url": run_url,
             "sha": os.getenv("GITHUB_SHA", ""),
             "ref": os.getenv("GITHUB_REF", ""),
             "actor": os.getenv("GITHUB_ACTOR", ""),
+            "repository": os.getenv("GITHUB_REPOSITORY", ""),
+            "server_url": os.getenv("GITHUB_SERVER_URL", ""),
+            "run_url": f"{os.getenv('GITHUB_SERVER_URL','')}/{os.getenv('GITHUB_REPOSITORY','')}/actions/runs/{os.getenv('GITHUB_RUN_ID','')}",
         },
-        "files": {
-            "release_manifest.json": {
-                "path": "out/release/release_manifest.json",
-                "sha256": sha256_file(manifest) if manifest.exists() else "",
-            },
-            "release_manifest.json.sha256": {
-                "path": "out/release/release_manifest.json.sha256",
-                "sha256": sha256_file(manifest_sha) if manifest_sha.exists() else "",
-            },
-            "release_manifest.json.ots": {
-                "path": "out/release/release_manifest.json.ots",
-                "sha256": sha256_file(manifest_ots) if manifest_ots.exists() else "",
-            },
-        },
+        "files": files,
         "meaning": [
-            "This receipt proves the manifest stamping pipeline ran in GitHub Actions.",
-            "The manifest hash, sha256 sidecar, and ots proof are bound to this workflow execution."
+            "This receipt proves that the manifest stamping pipeline ran in GitHub Actions.",
+            "The manifest hash, sha256 sidecar, and ots proof are bound to this workflow execution.",
         ],
     }
 
-    receipt.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    out_path = OUT / "github_actions_receipt.json"
+    out_path.write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + "\n")
 
-    print(f"[OK] wrote receipt: {receipt}")
+    print(f"[OK] wrote receipt: {out_path}")
 
 
 if __name__ == "__main__":
